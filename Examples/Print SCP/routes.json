@@ -1,0 +1,10 @@
+{
+    "routes": [
+        {
+            "caller": "MVCLIENT",
+            "called": "PRINTSCP",
+            "printerName": "OFF_PP_Digit",
+            "duplex": "LongEdge"
+        }
+    ]
+}

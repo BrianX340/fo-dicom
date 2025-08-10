@@ -18,9 +18,9 @@ namespace Print_SCP
 
             //All print jobs willbe created to the exe folder under a folder named PrintJobs
 
-            Console.WriteLine("Starting print SCP server with AET: PRINTSCP on port 8000");
+            Console.WriteLine("Starting print SCP server with AET: PRINTSCP on port 7250");
             
-            PrintService.Start(8000,"PRINTSCP");
+            PrintService.Start(7250,"PRINTSCP");
 
             Console.WriteLine("Press any key to stop the service");
 
