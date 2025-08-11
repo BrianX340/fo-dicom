@@ -2,9 +2,11 @@
     "routes": [
         {
             "caller": "MVCLIENT",
-            "called": "PRINTSCP",
-            "printerName": "OFF_PP_Digit",
-            "duplex": "LongEdge"
+            "called": "HUASSCOLORTEST",
+            "printerName": "HUA_SS_Color",
+            "duplex": "LongEdge",
+            "paperSize": "A4",
+            "tray": "Bandeja 2"
         }
     ]
 }
