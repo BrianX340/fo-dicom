@@ -1,86 +1,105 @@
-# Fellow Oak DICOM for .NET
+Este repositorio fue modificado de un fork a https://github.com/hdesouky/fo-dicom/tree/master
+---------------------------
 
-[![Join the chat at https://gitter.im/fo-dicom/fo-dicom](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/fo-dicom/fo-dicom?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+DICOM Print SCP — Guía rápida
 
-Binaries are available from [NuGet](http://www.nuget.org/packages/fo-dicom).
+Qué resuelve
+Permite que equipos de imagen (ecógrafos, RM, TC, etc.) impriman en impresoras de Windows.
+El ruteo se hace por AE Titles: según el Calling AE (equipo) y el Called AE (nombre lógico de la “impresora DICOM”), el servidor elige qué impresora usar y con qué tamaño/bandeja.
 
-### Features
-* High-performance, fully asynchronous, .NET 4.0 API
-* JPEG (including lossless), JPEG-LS, JPEG2000, and RLE image compression
-* Supports very large datasets with content loading on demand
-* Image rendering
+1) Configurá routes.json
+Cada ítem es una regla. Si llega un trabajo con caller (Calling AE del equipo) y called (Called AE configurado en el equipo), se envía a printerName con los overrides indicados.
 
-### Notes
-* Support for compressed images requires the Visual Studio 2010 SP1 Redistributable Package to be installed. ([x86](http://www.microsoft.com/en-us/download/details.aspx?id=8328) or [x64](http://www.microsoft.com/en-us/download/details.aspx?id=14632)) 
+Ejemplo con dos ecógrafos (AEs distintos) y dos impresoras físicas.
+- Ecógrafo A → Calling AE = ECOGA
+- Ecógrafo B → Calling AE = ECOGB
 
-### Examples
+{
+  "routes": [
+    {
+      "caller": "ECOGA",
+      "called": "HUASSCOLORTESTA4",
+      "printerName": "HUA_SS_Color",
+      "duplex": "LongEdge",
 
-#### File Operations
-```csharp
-var file = DicomFile.Open(@"test.dcm");
+      "forcePaperSize": "A4",
+      "forceTray": "Bandeja 2",
+      "fitToPage": true,
+      "sendEventReports": false
+    },
+    {
+      "caller": "ECOGA",
+      "called": "HUASSCOLORTESTA3",
+      "printerName": "HUA_SS_Color",
+      "duplex": "LongEdge",
 
-var patientid = file.Dataset.Get<string>(DicomTag.PatientID);
+      "forcePaperSize": "A3",
+      "forceTray": "",
+      "fitToPage": true,
+      "sendEventReports": false
+    },
+    {
+      "caller": "ECOGB",
+      "called": "HUAPBCOLORTESTA4",
+      "printerName": "HUA_PB_Color",
+      "duplex": "LongEdge",
 
-file.Dataset.Add(DicomTag.PatientsName, "DOE^JOHN");
+      "forcePaperSize": "A4",
+      "forceTray": "Bandeja 2",
+      "fitToPage": true,
+      "sendEventReports": false
+    }
+  ]
+}
 
-// creates a new instance of DicomFile
-file = file.ChangeTransferSyntax(DicomTransferSyntax.JPEGProcess14SV1);
+Campos clave (resumen):
+- caller: Calling AE del equipo.
+- called: Called AE que vas a configurar en el equipo para esta “impresora”.
+- printerName: nombre exacto de la impresora en Windows.
+- forcePaperSize: A3/A4/Letter o FilmSizeID (10INX12IN, 24CMX30CM).
+- forceTray: nombre de bandeja (vacío si querés que el driver elija).
+- fitToPage: ajusta manteniendo aspecto.
+- duplex: LongEdge | ShortEdge | Simplex.
+- sendEventReports: habilita o no N-EVENT-REPORT (usualmente false).
 
-file.Save(@"output.dcm");
-```
+2) Configurá los equipos (SCU)
+Servidor DICOM Print SCP
+- IP: 11.11.11.11 (ejemplo)
+- Puerto: 7250
 
-#### Render Image to JPEG
-```csharp
-var image = new DicomImage(@"test.dcm");
-image.RenderImage().Save(@"test.jpg");
-```
+Ecógrafo A
+- Calling AE: ECOGA
+- Agregar “impresoras” DICOM:
+  - A4 → IP 11.11.11.11, Puerto 7250, Called AE HUASSCOLORTESTA4
+  - A3 → IP 11.11.11.11, Puerto 7250, Called AE HUASSCOLORTESTA3
 
-#### C-Store SCU
-```csharp
-var client = new DicomClient();
-client.AddRequest(new DicomCStoreRequest(@"test.dcm"));
-client.Send("127.0.0.1", 12345, false, "SCU", "ANY-SCP");
-```
+Ecógrafo B
+- Calling AE: ECOGB
+- Agregar:
+  - A4 → IP 11.11.11.11, Puerto 7250, Called AE HUAPBCOLORTESTA4
 
-#### C-Echo SCU/SCP
-```csharp
-var server = new DicomServer<DicomCEchoProvider>(12345);
+Cada Called AE representa una configuración distinta (tamaño/bandeja/impresora), aunque apunte a la misma impresora física.
 
-var client = new DicomClient();
-client.NegotiateAsyncOps();
-for (int i = 0; i < 10; i++)
-    client.AddRequest(new DicomCEchoRequest());
-client.Send("127.0.0.1", 12345, false, "SCU", "ANY-SCP");
-```
+3) Probar
+Enviá una impresión desde el equipo al Called AE deseado.
+El servidor responde OK (Success) apenas el trabajo entra al spooler de Windows.
 
-#### C-Find SCU
-```csharp
-var cfind = DicomCFindRequest.CreateStudyQuery(patientId: "12345");
-cfind.OnResponseReceived = (DicomCFindRequest rq, DicomCFindResponse rp) => {
-	Console.WriteLine("Study UID: {0}", rp.Dataset.Get<string>(DicomTag.StudyInstanceUID));
-};
+Tips y resolución de problemas
+- A3 sale “chico” centrado → Es A4 dentro de A3.
+  * Usá forcePaperSize: "A3" y dejá forceTray vacío o una bandeja que realmente tenga A3.
+  * En el driver, escala 100% y sin “ajustar al papel”.
+- La impresora pide confirmar tamaño → Mismatch trabajo/bandeja.
+  * Forzá tamaño correcto y (si hace falta) bandeja en la ruta.
+- Márgenes → El código pone márgenes 0 y compensa hard margins.
+  * Para “a sangre” real, activá Borderless si el driver lo soporta.
+- No encuentra la impresora → printerName debe coincidir exactamente con el nombre en Windows.
 
-var client = new DicomClient();
-client.AddRequest(cfind);
-client.Send("127.0.0.1", 104, false, "SCU-AE", "SCP-AE");
-```
+Cómo funciona por dentro (mini)
+- Acepta Basic (Gray/Color) Print Management + Print Job.
+- Resuelve ruta por (Calling AE, Called AE).
+- Aplica impresora/duplex/papel/bandeja/fit.
+- Renderiza a página completa (usa PageBounds y compensa hard margins).
+- Si no forzás papel, intenta usar FilmSizeID del FilmBox.
+- Devuelve Success al N-ACTION al encolar el job.
 
-#### C-Move SCU
-```csharp
-var cmove = new DicomCMoveRequest("DEST-AE", studyInstanceUid);
 
-var client = new DicomClient();
-client.AddRequest(cmove);
-client.Send("127.0.0.1", 104, false, "SCU-AE", "SCP-AE");
-```
-
-### Contributors
-* [Hesham Desouky](https://github.com/hdesouky) (Nebras Technology)
-* [Mahesh Dubey](https://github.com/mdubey82)
-* [Anders Gustafsson](https://github.com/cureos) (Cureos AB)
-* [Justin Wake](https://github.com/jwake)
-* [Chris Horn](https://github.com/GMZ)
-* [captainstark](https://github.com/captainstark)
-
-### License
-This library is licensed under the [Microsoft Public License (MS-PL)](http://opensource.org/licenses/MS-PL). See _License.txt_ for more information.
